@@ -1,8 +1,7 @@
 package com.itc.studentmgmt.database;
 
+import com.itc.studentmgmt.security.PasswordSecurityUtil;
 import java.sql.*;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 
 /**
  * 🔐 SIMPLIFIED DATABASE CONNECTION
@@ -10,6 +9,7 @@ import com.zaxxer.hikari.HikariDataSource;
  * 
  * Auto-creates database and tables if they don't exist.
  * Simple configuration - just update the credentials below.
+ * Uses plain JDBC for maximum compatibility.
  * 
  * ╔═══════════════════════════════════════════════════════════════════════════╗
  * ║  📝 CONFIGURATION INSTRUCTIONS:                                           ║
@@ -39,20 +39,26 @@ public class DatabaseConnection {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private static volatile DatabaseConnection instance;
-    private HikariDataSource dataSource;
+    private String jdbcUrl;
     
     /**
      * Private constructor - establishes connection and creates database/tables
      */
     private DatabaseConnection() throws SQLException {
         try {
+            // Load MySQL driver
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            
             // First, create the database if it doesn't exist
             createDatabaseIfNotExists();
             
-            // Then set up the connection pool
-            setupConnectionPool();
+            // Set the JDBC URL for future connections
+            this.jdbcUrl = String.format(
+                "jdbc:mysql://%s:%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8",
+                DB_HOST, DB_PORT, DB_NAME
+            );
             
-            // Finally, create tables if they don't exist
+            // Create tables if they don't exist
             createTablesIfNotExist();
             
             // Create default admin user if no users exist
@@ -60,6 +66,8 @@ public class DatabaseConnection {
             
             System.out.println("✅ Database connection established successfully!");
             
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("MySQL JDBC Driver not found: " + e.getMessage(), e);
         } catch (Exception e) {
             throw new SQLException("Failed to establish database connection: " + e.getMessage(), e);
         }
@@ -81,36 +89,10 @@ public class DatabaseConnection {
     }
     
     /**
-     * Set up HikariCP connection pool
-     */
-    private void setupConnectionPool() {
-        String jdbcUrl = String.format(
-            "jdbc:mysql://%s:%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8",
-            DB_HOST, DB_PORT, DB_NAME
-        );
-        
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(jdbcUrl);
-        config.setUsername(DB_USERNAME);
-        config.setPassword(DB_PASSWORD);
-        
-        // Connection pool settings
-        config.setMaximumPoolSize(10);
-        config.setMinimumIdle(2);
-        config.setConnectionTimeout(30000);
-        config.setIdleTimeout(600000);
-        config.setMaxLifetime(1800000);
-        config.setPoolName("StudentMgmtPool");
-        config.setConnectionTestQuery("SELECT 1");
-        
-        this.dataSource = new HikariDataSource(config);
-    }
-    
-    /**
      * Create all required tables
      */
     private void createTablesIfNotExist() throws SQLException {
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = getConnection()) {
             Statement stmt = conn.createStatement();
             
             // Create users table
@@ -231,7 +213,7 @@ public class DatabaseConnection {
      * Create default admin and teacher users if no users exist
      */
     private void createDefaultUsers() throws SQLException {
-        try (Connection conn = dataSource.getConnection()) {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, DB_USERNAME, DB_PASSWORD)) {
             // Check if users exist
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM users");
@@ -241,10 +223,10 @@ public class DatabaseConnection {
             if (userCount == 0) {
                 System.out.println("📝 Creating default users...");
                 
-                // Import password hashing utility
-                String adminHash = com.itc.studentmgmt.security.PasswordSecurityUtil.hashPassword("admin123");
-                String teacherHash = com.itc.studentmgmt.security.PasswordSecurityUtil.hashPassword("teacher123");
-                String studentHash = com.itc.studentmgmt.security.PasswordSecurityUtil.hashPassword("student123");
+                // Hash passwords using imported utility
+                String adminHash = PasswordSecurityUtil.hashPassword("admin123");
+                String teacherHash = PasswordSecurityUtil.hashPassword("teacher123");
+                String studentHash = PasswordSecurityUtil.hashPassword("student123");
                 
                 PreparedStatement pstmt = conn.prepareStatement(
                     "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)"
@@ -296,35 +278,21 @@ public class DatabaseConnection {
      * Get a connection from the pool
      */
     public Connection getConnection() throws SQLException {
-        if (dataSource == null || dataSource.isClosed()) {
-            throw new SQLException("Connection pool is closed");
-        }
-        return dataSource.getConnection();
+        return DriverManager.getConnection(jdbcUrl, DB_USERNAME, DB_PASSWORD);
     }
     
     /**
      * Close the connection pool
      */
     public void closeConnectionPool() throws SQLException {
-        if (dataSource != null && !dataSource.isClosed()) {
-            dataSource.close();
-            System.out.println("✅ Database connection pool closed");
-        }
+        System.out.println("✅ Database connection closed");
     }
     
     /**
      * Get connection pool statistics
      */
     public String getPoolStats() {
-        if (dataSource != null && dataSource.getHikariPoolMXBean() != null) {
-            return String.format(
-                "Active: %d, Idle: %d, Total: %d",
-                dataSource.getHikariPoolMXBean().getActiveConnections(),
-                dataSource.getHikariPoolMXBean().getIdleConnections(),
-                dataSource.getHikariPoolMXBean().getTotalConnections()
-            );
-        }
-        return "Pool not initialized";
+        return "Using direct JDBC connections";
     }
     
     /**
