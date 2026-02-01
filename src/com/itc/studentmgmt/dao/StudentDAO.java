@@ -1,7 +1,7 @@
 package com.itc.studentmgmt.dao;
 
-import com.itc.studentmgmt.model.Student;
 import com.itc.studentmgmt.database.DatabaseConnection;
+import com.itc.studentmgmt.model.Student;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,12 +34,18 @@ public class StudentDAO {
             ResultSet rs = pstmt.executeQuery();
             
             if (rs.next()) {
-                return new Student(
+                Student student = new Student(
                     rs.getString("student_id"),
                     rs.getString("name"),
                     rs.getString("email"),
                     rs.getString("major")
                 );
+                student.setPhone(rs.getString("phone"));
+                student.setAddress(rs.getString("address"));
+                student.setDateOfBirth(rs.getDate("date_of_birth"));
+                student.setGpa(rs.getDouble("gpa"));
+                student.setStatus(rs.getString("status"));
+                return student;
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -56,12 +62,18 @@ public class StudentDAO {
              ResultSet rs = stmt.executeQuery(sql)) {
             
             while (rs.next()) {
-                students.add(new Student(
+                Student student = new Student(
                     rs.getString("student_id"),
                     rs.getString("name"),
                     rs.getString("email"),
                     rs.getString("major")
-                ));
+                );
+                student.setPhone(rs.getString("phone"));
+                student.setAddress(rs.getString("address"));
+                student.setDateOfBirth(rs.getDate("date_of_birth"));
+                student.setGpa(rs.getDouble("gpa"));
+                student.setStatus(rs.getString("status"));
+                students.add(student);
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -99,6 +111,12 @@ public class StudentDAO {
         }
     }
     
+    public Student getStudentByUsername(String username) {
+        // First get the student_id from the username (assuming username = student_id)
+        // Or we need to add username column to students table
+        return getStudent(username);
+    }
+    
     public List<Student> searchStudents(String keyword) {
         List<Student> students = new ArrayList<>();
         String sql = "SELECT * FROM students WHERE student_id LIKE ? OR name LIKE ? OR email LIKE ?";
@@ -113,12 +131,18 @@ public class StudentDAO {
             
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()) {
-                students.add(new Student(
+                Student student = new Student(
                     rs.getString("student_id"),
                     rs.getString("name"),
                     rs.getString("email"),
                     rs.getString("major")
-                ));
+                );
+                student.setPhone(rs.getString("phone"));
+                student.setAddress(rs.getString("address"));
+                student.setDateOfBirth(rs.getDate("date_of_birth"));
+                student.setGpa(rs.getDouble("gpa"));
+                student.setStatus(rs.getString("status"));
+                students.add(student);
             }
         } catch (SQLException e) {
             e.printStackTrace();

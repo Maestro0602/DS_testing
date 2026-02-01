@@ -1,5 +1,6 @@
 package main;
 import com.itc.studentmgmt.database.DatabaseConnection;
+import com.itc.studentmgmt.security.TwoFactorAuthService;
 import com.itc.studentmgmt.ui.LoginFrame;
 import java.sql.SQLException;
 import javax.swing.SwingUtilities;
@@ -28,6 +29,9 @@ public class main {
             System.out.println("📊 Connection Pool Status:");
             System.out.println("   " + DatabaseConnection.getInstance().getPoolStats());
             System.out.println();
+            
+            // Display 2FA configuration status
+            System.out.println(TwoFactorAuthService.getConfigurationStatus());
             
             // Launch the login GUI
             System.out.println("🚀 Launching application...\n");

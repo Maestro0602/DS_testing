@@ -1,12 +1,13 @@
 package com.itc.studentmgmt.service;
 
 import com.itc.studentmgmt.database.DatabaseConnection;
+import com.itc.studentmgmt.model.User;
+import com.itc.studentmgmt.model.UserRole;
 import com.itc.studentmgmt.security.PasswordSecurityUtil;
 import com.itc.studentmgmt.security.SecureSessionManager;
 import com.itc.studentmgmt.security.SecurityAuditLogger;
 import com.itc.studentmgmt.security.SensitiveDataProtector;
-import com.itc.studentmgmt.model.User;
-import com.itc.studentmgmt.model.UserRole;
+import com.itc.studentmgmt.security.TwoFactorAuthService;
 import java.sql.*;
 
 /**
@@ -457,5 +458,154 @@ public class AuthenticationService {
         }
         
         return false;
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TWO-FACTOR AUTHENTICATION METHODS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    // Enable/Disable 2FA - set to true to require 2FA for all logins
+    private static final boolean TWO_FACTOR_ENABLED = true;
+    
+    /**
+     * Check if 2FA is enabled for the system.
+     */
+    public boolean isTwoFactorEnabled() {
+        return TWO_FACTOR_ENABLED && TwoFactorAuthService.isConfigured();
+    }
+    
+    /**
+     * Validate credentials only (Step 1 of 2FA login).
+     * Does NOT create a session - only validates username/password.
+     * 
+     * @param username Username
+     * @param password Password
+     * @return User object with role info if valid, null otherwise
+     */
+    public User validateCredentials(String username, String password) {
+        return validateCredentials(username, password, "0.0.0.0", "Unknown");
+    }
+    
+    /**
+     * Validate credentials with full client info (Step 1 of 2FA login).
+     */
+    public User validateCredentials(String username, String password, 
+                                   String ipAddress, String userAgent) {
+        String sql = "SELECT password_hash, role, failed_login_attempts, account_locked, " +
+                    "lockout_until FROM users WHERE username = ?";
+        
+        try (Connection conn = DatabaseConnection.getInstance().getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            ResultSet rs = pstmt.executeQuery();
+            
+            if (rs.next()) {
+                // Check if account is locked
+                if (rs.getBoolean("account_locked")) {
+                    Timestamp lockoutUntil = rs.getTimestamp("lockout_until");
+                    if (lockoutUntil != null && lockoutUntil.after(new Timestamp(System.currentTimeMillis()))) {
+                        return null;
+                    } else {
+                        unlockAccount(username);
+                    }
+                }
+                
+                String storedHash = rs.getString("password_hash");
+                String roleStr = rs.getString("role");
+                int failedAttempts = rs.getInt("failed_login_attempts");
+                
+                // Verify password
+                boolean isValid = PasswordSecurityUtil.verifyPassword(password, storedHash);
+                
+                if (isValid) {
+                    // Create user object (but don't create session yet)
+                    User user = new User();
+                    user.setUsername(username);
+                    user.setRole(UserRole.valueOf(roleStr.toUpperCase()));
+                    return user;
+                } else {
+                    // Increment failed attempts
+                    failedAttempts++;
+                    updateLoginFailure(username, failedAttempts, ipAddress);
+                }
+            } else {
+                // User not found - use constant time to prevent enumeration
+                PasswordSecurityUtil.verifyPassword(password, "$argon2id$v=19$m=65536,t=3,p=4$dummy$dummy");
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("❌ Credential validation error: " + 
+                SensitiveDataProtector.redactPII(e.getMessage()));
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Complete login after 2FA verification (Step 2 of 2FA login).
+     * Creates session and updates login tracking.
+     * 
+     * @param username Username (already validated)
+     * @param ipAddress Client IP
+     * @param userAgent Client user agent
+     * @return User object with session token
+     */
+    public User completeLoginAfter2FA(String username, String ipAddress, String userAgent) {
+        String sql = "SELECT role FROM users WHERE username = ?";
+        
+        try (Connection conn = DatabaseConnection.getInstance().getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            ResultSet rs = pstmt.executeQuery();
+            
+            if (rs.next()) {
+                String roleStr = rs.getString("role");
+                
+                // Reset failed attempts and update last login
+                updateLoginSuccess(username);
+                
+                // Create user object
+                User user = new User();
+                user.setUsername(username);
+                user.setRole(UserRole.valueOf(roleStr.toUpperCase()));
+                
+                // Create secure session
+                String sessionToken = SecureSessionManager.createSession(
+                    username, roleStr, ipAddress, userAgent);
+                user.setSessionToken(sessionToken);
+                
+                // Log successful login with 2FA
+                SecurityAuditLogger.logSecurityEvent(
+                    SecurityAuditLogger.EventType.LOGIN_SUCCESS,
+                    username, ipAddress,
+                    "User logged in with 2FA verification"
+                );
+                
+                System.out.println("✅ Login successful (2FA verified): " + username);
+                return user;
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("❌ Login completion error: " + 
+                SensitiveDataProtector.redactPII(e.getMessage()));
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Send 2FA code to user.
+     */
+    public TwoFactorAuthService.TwoFactorResult send2FACode(String username) {
+        return TwoFactorAuthService.generateAndSendCode(username);
+    }
+    
+    /**
+     * Verify 2FA code.
+     */
+    public TwoFactorAuthService.TwoFactorResult verify2FACode(String username, String code) {
+        return TwoFactorAuthService.verifyCode(username, code);
     }
 }

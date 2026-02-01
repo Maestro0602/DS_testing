@@ -35,11 +35,12 @@ Write-Host "[1/3] Compiling Java files..." -ForegroundColor Cyan
 Write-Host "───────────────────────────────────────────────────────────────────"
 
 try {
-    Get-ChildItem -Path src -Recurse -Filter "*.java" | Select-Object -ExpandProperty FullName | ForEach-Object {
-        javac -encoding UTF-8 -d bin -sourcepath src $_
-        if ($LASTEXITCODE -ne 0) {
-            throw "Compilation failed for $_"
-        }
+    $javaFiles = Get-ChildItem -Path src -Recurse -Filter "*.java" | Select-Object -ExpandProperty FullName
+    $javaFilesStr = $javaFiles -join " "
+    $libPath = "lib/*"
+    javac -encoding UTF-8 -cp $libPath -d bin -sourcepath src $javaFiles
+    if ($LASTEXITCODE -ne 0) {
+        throw "Compilation failed"
     }
     Write-Host "✓ Compilation successful" -ForegroundColor Green
 } catch {
@@ -94,7 +95,7 @@ Write-Host "[2/3] Running security simulation..." -ForegroundColor Cyan
 Write-Host "───────────────────────────────────────────────────────────────────"
 Write-Host ""
 
-java -cp bin com.itc.studentmgmt.security.SecuritySimulationRunner $testArg
+java -cp "bin;lib/*" com.itc.studentmgmt.security.SecuritySimulationRunner $testArg
 
 Write-Host ""
 Write-Host ""

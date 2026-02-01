@@ -1,6 +1,7 @@
 package com.itc.studentmgmt.ui;
 
 import com.itc.studentmgmt.model.User;
+import com.itc.studentmgmt.security.TwoFactorAuthService;
 import com.itc.studentmgmt.service.AuthenticationService;
 import java.awt.*;
 import javax.swing.*;
@@ -212,14 +213,220 @@ public class LoginFrame extends JFrame {
             return;
         }
         
-        User user = authService.login(username, password);
-        if (user != null) {
-            dispose();
-            new MainFrame(user).setVisible(true);
+        // Check if 2FA is enabled and configured
+        if (authService.isTwoFactorEnabled()) {
+            // Step 1: Validate credentials first
+            User user = authService.validateCredentials(username, password);
+            
+            if (user != null) {
+                // Step 2: Send 2FA code
+                TwoFactorAuthService.TwoFactorResult sendResult = authService.send2FACode(username);
+                
+                if (sendResult == TwoFactorAuthService.TwoFactorResult.SUCCESS) {
+                    // Step 3: Show 2FA dialog
+                    show2FADialog(username);
+                } else if (sendResult == TwoFactorAuthService.TwoFactorResult.NOT_CONFIGURED) {
+                    // 2FA not configured, fall back to regular login
+                    User loggedInUser = authService.login(username, password);
+                    if (loggedInUser != null) {
+                        dispose();
+                        new EnhancedMainFrame(loggedInUser).setVisible(true);
+                    } else {
+                        showErrorDialog("Login failed");
+                        passwordField.setText("");
+                    }
+                } else {
+                    showErrorDialog("Failed to send verification code. Please try again.");
+                }
+            } else {
+                showErrorDialog("Invalid username or password");
+                passwordField.setText("");
+            }
         } else {
-            showErrorDialog("Invalid username or password");
-            passwordField.setText("");
+            // Regular login without 2FA
+            User user = authService.login(username, password);
+            if (user != null) {
+                dispose();
+                new EnhancedMainFrame(user).setVisible(true);
+            } else {
+                showErrorDialog("Invalid username or password");
+                passwordField.setText("");
+            }
         }
+    }
+    
+    /**
+     * Show 2FA verification dialog
+     */
+    private void show2FADialog(String username) {
+        // Create 2FA dialog
+        JDialog dialog = new JDialog(this, "Two-Factor Authentication", true);
+        dialog.setSize(400, 300);
+        dialog.setLocationRelativeTo(this);
+        dialog.setResizable(false);
+        
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(new EmptyBorder(30, 40, 30, 40));
+        panel.setBackground(BACKGROUND_COLOR);
+        
+        // Icon
+        JLabel iconLabel = new JLabel("🔐");
+        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 40));
+        iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(iconLabel);
+        
+        panel.add(Box.createRigidArea(new Dimension(0, 15)));
+        
+        // Title
+        JLabel titleLabel = new JLabel("Verification Required");
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        titleLabel.setForeground(TEXT_COLOR);
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(titleLabel);
+        
+        panel.add(Box.createRigidArea(new Dimension(0, 10)));
+        
+        // Message
+        JLabel messageLabel = new JLabel("<html><div style='text-align: center;'>" +
+            "A verification code has been sent to your<br/>" +
+            "Telegram/Discord. Enter the code below:</div></html>");
+        messageLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        messageLabel.setForeground(LIGHT_TEXT);
+        messageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(messageLabel);
+        
+        panel.add(Box.createRigidArea(new Dimension(0, 20)));
+        
+        // Code input field
+        JTextField codeField = new JTextField(6);
+        codeField.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        codeField.setHorizontalAlignment(JTextField.CENTER);
+        codeField.setMaximumSize(new Dimension(200, 50));
+        codeField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(PRIMARY_COLOR, 2),
+            new EmptyBorder(10, 15, 10, 15)
+        ));
+        panel.add(codeField);
+        
+        panel.add(Box.createRigidArea(new Dimension(0, 20)));
+        
+        // Verify button
+        JButton verifyButton = new JButton("VERIFY") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                if (getModel().isPressed()) {
+                    g2d.setColor(PRIMARY_COLOR.darker());
+                } else {
+                    GradientPaint gp = new GradientPaint(0, 0, PRIMARY_COLOR, getWidth(), 0, SECONDARY_COLOR);
+                    g2d.setPaint(gp);
+                }
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                
+                g2d.setColor(Color.WHITE);
+                g2d.setFont(getFont());
+                FontMetrics fm = g2d.getFontMetrics();
+                int x = (getWidth() - fm.stringWidth(getText())) / 2;
+                int y = ((getHeight() - fm.getHeight()) / 2) + fm.getAscent();
+                g2d.drawString(getText(), x, y);
+            }
+        };
+        verifyButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        verifyButton.setForeground(Color.WHITE);
+        verifyButton.setFocusPainted(false);
+        verifyButton.setBorderPainted(false);
+        verifyButton.setContentAreaFilled(false);
+        verifyButton.setMaximumSize(new Dimension(200, 40));
+        verifyButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        verifyButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        
+        verifyButton.addActionListener(e -> {
+            String code = codeField.getText().trim();
+            if (code.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, 
+                    "Please enter the verification code", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            TwoFactorAuthService.TwoFactorResult result = authService.verify2FACode(username, code);
+            
+            switch (result) {
+                case SUCCESS:
+                    dialog.dispose();
+                    // Complete login after successful 2FA
+                    User user = authService.completeLoginAfter2FA(username, "0.0.0.0", "Desktop App");
+                    if (user != null) {
+                        dispose();
+                        new EnhancedMainFrame(user).setVisible(true);
+                    } else {
+                        showErrorDialog("Login failed after verification");
+                    }
+                    break;
+                    
+                case INVALID_CODE:
+                    JOptionPane.showMessageDialog(dialog,
+                        "Invalid verification code. Please try again.",
+                        "Verification Failed", JOptionPane.ERROR_MESSAGE);
+                    codeField.setText("");
+                    break;
+                    
+                case CODE_EXPIRED:
+                    JOptionPane.showMessageDialog(dialog,
+                        "Verification code has expired. Please login again.",
+                        "Code Expired", JOptionPane.ERROR_MESSAGE);
+                    dialog.dispose();
+                    break;
+                    
+                case TOO_MANY_ATTEMPTS:
+                    JOptionPane.showMessageDialog(dialog,
+                        "Too many failed attempts. Please login again.",
+                        "Verification Blocked", JOptionPane.ERROR_MESSAGE);
+                    dialog.dispose();
+                    break;
+                    
+                default:
+                    JOptionPane.showMessageDialog(dialog,
+                        "Verification failed. Please try again.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        // Allow Enter key to verify
+        codeField.addActionListener(e -> verifyButton.doClick());
+        
+        panel.add(verifyButton);
+        
+        panel.add(Box.createRigidArea(new Dimension(0, 15)));
+        
+        // Resend link
+        JLabel resendLabel = new JLabel("<html><u>Resend Code</u></html>");
+        resendLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        resendLabel.setForeground(PRIMARY_COLOR);
+        resendLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        resendLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        resendLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                TwoFactorAuthService.TwoFactorResult result = authService.send2FACode(username);
+                if (result == TwoFactorAuthService.TwoFactorResult.SUCCESS) {
+                    JOptionPane.showMessageDialog(dialog,
+                        "A new verification code has been sent.",
+                        "Code Sent", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(dialog,
+                        "Failed to resend code. Please try again.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+        panel.add(resendLabel);
+        
+        dialog.add(panel);
+        dialog.setVisible(true);
     }
     
     private void showErrorDialog(String message) {

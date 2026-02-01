@@ -34,7 +34,7 @@ echo.
 echo [1/3] Compiling Java files...
 echo ─────────────────────────────────────────────────────────────────── 
 
-powershell -Command "Get-ChildItem -Path src -Recurse -Filter '*.java' | Select-Object -ExpandProperty FullName | ForEach-Object { javac -encoding UTF-8 -d bin -sourcepath src $_ }"
+javac -encoding UTF-8 -cp "lib/*" -d bin -sourcepath src src/main/main.java src/com/itc/studentmgmt/security/*.java src/com/itc/studentmgmt/service/*.java src/com/itc/studentmgmt/ui/*.java src/com/itc/studentmgmt/model/*.java src/com/itc/studentmgmt/database/*.java src/com/itc/studentmgmt/dao/*.java
 
 if errorlevel 1 (
     echo.
@@ -89,7 +89,7 @@ echo [2/3] Running security simulation...
 echo ───────────────────────────────────────────────────────────────────
 echo.
 
-java -cp bin com.itc.studentmgmt.security.SecuritySimulationRunner %TEST_ARG%
+java -cp "bin;lib/*" com.itc.studentmgmt.security.SecuritySimulationRunner %TEST_ARG%
 
 echo.
 echo.
