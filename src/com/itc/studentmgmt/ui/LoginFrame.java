@@ -2,19 +2,20 @@ package com.itc.studentmgmt.ui;
 
 import com.itc.studentmgmt.model.User;
 import com.itc.studentmgmt.service.AuthenticationService;
+import java.awt.*;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import java.awt.*;
 
 public class LoginFrame extends JFrame {
     private JTextField usernameField;
     private JPasswordField passwordField;
-    private AuthenticationService authService;
+    private final AuthenticationService authService;
     
     // Modern color scheme
     private static final Color PRIMARY_COLOR = new Color(41, 128, 185);
     private static final Color SECONDARY_COLOR = new Color(52, 152, 219);
     private static final Color BACKGROUND_COLOR = new Color(236, 240, 241);
+    @SuppressWarnings("unused") // Reserved for potential card background customization
     private static final Color CARD_COLOR = Color.WHITE;
     private static final Color TEXT_COLOR = new Color(44, 62, 80);
     private static final Color LIGHT_TEXT = new Color(127, 140, 141);

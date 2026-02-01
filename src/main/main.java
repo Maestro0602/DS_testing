@@ -1,9 +1,9 @@
 package main;
-import com.itc.studentmgmt.ui.LoginFrame;
 import com.itc.studentmgmt.database.DatabaseConnection;
+import com.itc.studentmgmt.ui.LoginFrame;
+import java.sql.SQLException;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import java.sql.SQLException;
 
 /**
  * Main application entry point
