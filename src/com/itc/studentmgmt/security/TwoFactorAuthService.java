@@ -57,13 +57,13 @@ public class TwoFactorAuthService {
     // Get from @BotFather on Telegram
     private static final String TELEGRAM_BOT_TOKEN = getEnvOrDefault(
         "TELEGRAM_BOT_TOKEN", 
-        "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+        "8339279272:AAHN7KQVt9DAanb-8EielTEGw65uk0IySoU"
     );
     
     // Get from https://api.telegram.org/bot<TOKEN>/getUpdates after messaging your bot
     private static final String TELEGRAM_CHAT_ID = getEnvOrDefault(
         "TELEGRAM_CHAT_ID", 
-        "YOUR_TELEGRAM_CHAT_ID_HERE"
+        "1006124574"
     );
     
     // Discord Configuration
@@ -177,13 +177,8 @@ public class TwoFactorAuthService {
         if (sent) {
             System.out.println("✅ 2FA code sent via " + NOTIFICATION_CHANNEL);
             
-            // Log the event
-            SecurityAuditLogger.log(new SecurityAuditLogger.AuditEvent.Builder()
-                .eventType(SecurityAuditLogger.EventType.ACCESS_GRANTED)
-                .username(username)
-                .action("2FA_CODE_SENT")
-                .details("Verification code sent via " + NOTIFICATION_CHANNEL)
-                .build());
+            // Log the event to login audit
+            LoginAuditLogger.logTwoFactorSuccess(username, "0.0.0.0");
                 
             return TwoFactorResult.SUCCESS;
         } else {
@@ -209,12 +204,7 @@ public class TwoFactorAuthService {
         // Check if expired
         if (otpData.isExpired()) {
             pendingOTPs.remove(username);
-            SecurityAuditLogger.log(new SecurityAuditLogger.AuditEvent.Builder()
-                .eventType(SecurityAuditLogger.EventType.ACCESS_DENIED)
-                .username(username)
-                .action("2FA_EXPIRED")
-                .details("Verification code expired")
-                .build());
+            LoginAuditLogger.logTwoFactorFailure(username, "0.0.0.0", "Verification code expired");
             return TwoFactorResult.CODE_EXPIRED;
         }
         
@@ -222,33 +212,20 @@ public class TwoFactorAuthService {
         otpData.attempts++;
         if (otpData.hasExceededAttempts()) {
             pendingOTPs.remove(username);
-            SecurityAuditLogger.log(new SecurityAuditLogger.AuditEvent.Builder()
-                .eventType(SecurityAuditLogger.EventType.ACCESS_DENIED)
-                .username(username)
-                .action("2FA_BLOCKED")
-                .details("Too many failed verification attempts")
-                .build());
+            LoginAuditLogger.logTwoFactorFailure(username, "0.0.0.0", 
+                "Too many failed verification attempts (" + otpData.attempts + "/" + MAX_VERIFICATION_ATTEMPTS + ")");
             return TwoFactorResult.TOO_MANY_ATTEMPTS;
         }
         
         // Timing-safe comparison
         if (constantTimeEquals(enteredCode, otpData.code)) {
             pendingOTPs.remove(username);
-            SecurityAuditLogger.log(new SecurityAuditLogger.AuditEvent.Builder()
-                .eventType(SecurityAuditLogger.EventType.ACCESS_GRANTED)
-                .username(username)
-                .action("2FA_VERIFIED")
-                .details("Two-factor authentication successful")
-                .build());
+            LoginAuditLogger.logTwoFactorSuccess(username, "0.0.0.0");
             return TwoFactorResult.SUCCESS;
         }
         
-        SecurityAuditLogger.log(new SecurityAuditLogger.AuditEvent.Builder()
-            .eventType(SecurityAuditLogger.EventType.ACCESS_DENIED)
-            .username(username)
-            .action("2FA_FAILED")
-            .details("Invalid verification code. Attempt " + otpData.attempts + "/" + MAX_VERIFICATION_ATTEMPTS)
-            .build());
+        LoginAuditLogger.logTwoFactorFailure(username, "0.0.0.0", 
+            "Invalid verification code. Attempt " + otpData.attempts + "/" + MAX_VERIFICATION_ATTEMPTS);
             
         return TwoFactorResult.INVALID_CODE;
     }

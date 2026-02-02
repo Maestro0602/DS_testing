@@ -151,6 +151,9 @@ public class MaxSecurityAttackSimulation {
         log("   No real attacks or harmful operations are performed.");
         log("");
         
+        // Send Telegram notification that simulation has started
+        TelegramAlertService.alertSimulationStarted();
+        
         long startTime = System.currentTimeMillis();
         
         try {
@@ -175,6 +178,15 @@ public class MaxSecurityAttackSimulation {
         }
         
         long duration = System.currentTimeMillis() - startTime;
+        
+        // Send Telegram notification with simulation summary
+        TelegramAlertService.alertSimulationComplete(
+            rateLimitTriggered, 
+            injectionDetected, 
+            sessionAbuseDetected, 
+            abnormalAccessDetected, 
+            alertsGenerated
+        );
         
         return generateReport(duration);
     }
@@ -659,6 +671,9 @@ public class MaxSecurityAttackSimulation {
             )
         );
         alertsGenerated++;
+        
+        // Send Telegram alert for abnormal access pattern
+        TelegramAlertService.alertAbnormalAccess(attackerIp, suspiciousUser, recordsAccessed, accessDuration);
         
         // Log the abnormal behavior
         SecurityAuditLogger.log(new SecurityAuditLogger.AuditEvent.Builder()

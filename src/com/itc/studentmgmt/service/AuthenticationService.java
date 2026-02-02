@@ -3,6 +3,7 @@ package com.itc.studentmgmt.service;
 import com.itc.studentmgmt.database.DatabaseConnection;
 import com.itc.studentmgmt.model.User;
 import com.itc.studentmgmt.model.UserRole;
+import com.itc.studentmgmt.security.LoginAuditLogger;
 import com.itc.studentmgmt.security.PasswordSecurityUtil;
 import com.itc.studentmgmt.security.SecureSessionManager;
 import com.itc.studentmgmt.security.SecurityAuditLogger;
@@ -81,11 +82,8 @@ public class AuthenticationService {
                         long remainingMinutes = (lockoutUntil.getTime() - System.currentTimeMillis()) / 60000;
                         System.out.println("🔒 Account is locked. Try again in " + remainingMinutes + " minutes.");
                         
-                        SecurityAuditLogger.logSecurityEvent(
-                            SecurityAuditLogger.EventType.LOGIN_FAILURE,
-                            username, ipAddress,
-                            "Login attempt on locked account"
-                        );
+                        LoginAuditLogger.logLoginFailure(username, ipAddress, 
+                            "Login attempt on locked account (" + remainingMinutes + " minutes remaining)");
                         return null;
                     } else {
                         // Lockout expired, unlock the account
@@ -113,12 +111,8 @@ public class AuthenticationService {
                     String sessionToken = SecureSessionManager.createSession(username, roleStr, ipAddress, userAgent);
                     user.setSessionToken(sessionToken);
                     
-                    // Log successful login
-                    SecurityAuditLogger.logSecurityEvent(
-                        SecurityAuditLogger.EventType.LOGIN_SUCCESS,
-                        username, ipAddress,
-                        "User logged in successfully"
-                    );
+                    // Log successful login to database
+                    LoginAuditLogger.logLoginSuccess(username, ipAddress);
                     
                     System.out.println("✅ Login successful: " + username);
                     return user;
@@ -127,12 +121,9 @@ public class AuthenticationService {
                     failedAttempts++;
                     updateLoginFailure(username, failedAttempts, ipAddress);
                     
-                    // Log failed login
-                    SecurityAuditLogger.logSecurityEvent(
-                        SecurityAuditLogger.EventType.LOGIN_FAILURE,
-                        username, ipAddress,
-                        "Invalid password. Attempt " + failedAttempts + "/" + MAX_FAILED_ATTEMPTS
-                    );
+                    // Log failed login to database
+                    LoginAuditLogger.logLoginFailure(username, ipAddress, 
+                        "Invalid password. Attempt " + failedAttempts + "/" + MAX_FAILED_ATTEMPTS);
                     
                     if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
                         System.out.println("🔒 Account locked due to too many failed attempts.");
@@ -146,11 +137,7 @@ public class AuthenticationService {
                 PasswordSecurityUtil.verifyPassword(password, "$argon2id$v=19$m=65536,t=3,p=4$dummy$dummy");
                 System.out.println("❌ Invalid credentials");
                 
-                SecurityAuditLogger.logSecurityEvent(
-                    SecurityAuditLogger.EventType.LOGIN_FAILURE,
-                    username, ipAddress,
-                    "User not found"
-                );
+                LoginAuditLogger.logLoginFailure(username, ipAddress, "User not found");
             }
             
         } catch (SQLException e) {
@@ -273,11 +260,8 @@ public class AuthenticationService {
                 pstmt.setInt(2, LOCKOUT_DURATION_MINUTES);
                 pstmt.setString(3, username);
                 
-                SecurityAuditLogger.logSecurityEvent(
-                    SecurityAuditLogger.EventType.ACCOUNT_LOCKED,
-                    username, ipAddress,
-                    "Account locked after " + MAX_FAILED_ATTEMPTS + " failed attempts"
-                );
+                LoginAuditLogger.logAccountLocked(username, ipAddress, 
+                    "Account locked after " + MAX_FAILED_ATTEMPTS + " failed attempts for " + LOCKOUT_DURATION_MINUTES + " minutes");
             } else {
                 pstmt.setString(2, username);
             }
@@ -300,11 +284,7 @@ public class AuthenticationService {
             
             if (rows > 0) {
                 System.out.println("✅ Account unlocked: " + username);
-                SecurityAuditLogger.logSecurityEvent(
-                    SecurityAuditLogger.EventType.ACCOUNT_UNLOCKED,
-                    username, "0.0.0.0",
-                    "Account unlocked by administrator"
-                );
+                LoginAuditLogger.logAccountUnlocked(username, "0.0.0.0");
                 return true;
             }
             
@@ -343,11 +323,9 @@ public class AuthenticationService {
                 // Verify old password
                 if (!PasswordSecurityUtil.verifyPassword(oldPassword, storedHash)) {
                     System.out.println("❌ Current password is incorrect");
-                    SecurityAuditLogger.logSecurityEvent(
-                        SecurityAuditLogger.EventType.PASSWORD_CHANGE,
-                        username, ipAddress,
-                        "Password change failed - incorrect current password"
-                    );
+                    LoginAuditLogger.logLoginEvent(LoginAuditLogger.LoginEventType.PASSWORD_CHANGE, 
+                        username, ipAddress, "PASSWORD_CHANGE_FAILED", 
+                        "Password change failed - incorrect current password");
                     return false;
                 }
                 
@@ -382,11 +360,7 @@ public class AuthenticationService {
                         // Invalidate all existing sessions for security
                         SecureSessionManager.invalidateAllUserSessions(username);
                         
-                        SecurityAuditLogger.logSecurityEvent(
-                            SecurityAuditLogger.EventType.PASSWORD_CHANGE,
-                            username, ipAddress,
-                            "Password changed successfully - all sessions invalidated"
-                        );
+                        LoginAuditLogger.logPasswordChange(username, ipAddress);
                         return true;
                     }
                 }
@@ -405,13 +379,7 @@ public class AuthenticationService {
      */
     public void logout(String username, String sessionToken, String ipAddress) {
         SecureSessionManager.invalidateAllUserSessions(username);
-        SecurityAuditLogger.log(new SecurityAuditLogger.AuditEvent.Builder()
-            .eventType(SecurityAuditLogger.EventType.LOGOUT)
-            .username(username)
-            .ipAddress(ipAddress)
-            .action("LOGOUT")
-            .details("User logged out, session invalidated")
-            .build());
+        LoginAuditLogger.logLogout(username, ipAddress);
         System.out.println("✅ Logged out successfully: " + username);
     }
     

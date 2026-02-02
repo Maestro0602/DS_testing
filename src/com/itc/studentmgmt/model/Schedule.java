@@ -58,4 +58,26 @@ public class Schedule {
     
     public String getSemester() { return semester; }
     public void setSemester(String semester) { this.semester = semester; }
+    
+    // Convenience methods to set time from String (HH:MM format)
+    public void setStartTime(String timeStr) {
+        this.startTime = parseTime(timeStr);
+    }
+    
+    public void setEndTime(String timeStr) {
+        this.endTime = parseTime(timeStr);
+    }
+    
+    private Time parseTime(String timeStr) {
+        if (timeStr == null || timeStr.isEmpty()) return null;
+        try {
+            // Handle HH:MM format
+            if (timeStr.matches("\\d{1,2}:\\d{2}")) {
+                return Time.valueOf(timeStr + ":00");
+            }
+            return Time.valueOf(timeStr);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

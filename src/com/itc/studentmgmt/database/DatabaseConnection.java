@@ -114,6 +114,7 @@ public class DatabaseConnection {
             System.out.println("✅ Users table ready");
             
             // Create students table
+            // Note: phone and address use TEXT to accommodate encrypted data (AES + Base64 = long strings)
             String createStudentsTable = 
                 "CREATE TABLE IF NOT EXISTS students (" +
                 "id BIGINT AUTO_INCREMENT PRIMARY KEY," +
@@ -121,7 +122,7 @@ public class DatabaseConnection {
                 "name VARCHAR(100) NOT NULL," +
                 "email VARCHAR(100) UNIQUE NOT NULL," +
                 "major VARCHAR(50) NOT NULL," +
-                "phone VARCHAR(20)," +
+                "phone TEXT," +
                 "address TEXT," +
                 "date_of_birth DATE," +
                 "enrollment_date DATE DEFAULT (CURRENT_DATE)," +
@@ -135,6 +136,14 @@ public class DatabaseConnection {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
             stmt.executeUpdate(createStudentsTable);
             System.out.println("✅ Students table ready");
+            
+            // Alter phone column to TEXT if it exists as VARCHAR (for existing databases)
+            try {
+                stmt.executeUpdate("ALTER TABLE students MODIFY COLUMN phone TEXT");
+                System.out.println("✅ Phone column updated to TEXT for encryption support");
+            } catch (SQLException e) {
+                // Column might already be TEXT or table just created - ignore
+            }
             
             // Create audit_logs table for security logging
             String createAuditTable = 
@@ -188,9 +197,25 @@ public class DatabaseConnection {
             stmt.executeUpdate(createSchedulesTable);
             System.out.println("✅ Schedules table ready");
             
-            // Create student_enrollments table
+            // Create student_enrollments table with proper foreign key handling
+            // First, check if table exists and drop it to recreate with correct constraints
+            try {
+                // Check if table exists
+                DatabaseMetaData meta = conn.getMetaData();
+                ResultSet rs = meta.getTables(null, null, "student_enrollments", new String[]{"TABLE"});
+                if (rs.next()) {
+                    // Table exists, drop it
+                    stmt.executeUpdate("SET FOREIGN_KEY_CHECKS = 0");
+                    stmt.executeUpdate("DROP TABLE IF EXISTS student_enrollments");
+                    stmt.executeUpdate("SET FOREIGN_KEY_CHECKS = 1");
+                    System.out.println("🔄 Dropped old student_enrollments table");
+                }
+            } catch (SQLException e) {
+                System.out.println("⚠️ Warning while dropping table: " + e.getMessage());
+            }
+            
             String createEnrollmentsTable = 
-                "CREATE TABLE IF NOT EXISTS student_enrollments (" +
+                "CREATE TABLE student_enrollments (" +
                 "id BIGINT AUTO_INCREMENT PRIMARY KEY," +
                 "student_id VARCHAR(20) NOT NULL," +
                 "schedule_id BIGINT NOT NULL," +

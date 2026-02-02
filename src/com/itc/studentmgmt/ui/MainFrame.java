@@ -1,16 +1,16 @@
 package com.itc.studentmgmt.ui;
 
+import com.itc.studentmgmt.dao.StudentDAO;
+import com.itc.studentmgmt.model.Student;
 import com.itc.studentmgmt.model.User;
 import com.itc.studentmgmt.model.UserRole;
-import com.itc.studentmgmt.model.Student;
-import com.itc.studentmgmt.dao.StudentDAO;
-import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.JTableHeader;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.List;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
 
 public class MainFrame extends JFrame {
     private User currentUser;
@@ -120,6 +120,30 @@ public class MainFrame extends JFrame {
         headerPanel.add(headerRight, BorderLayout.EAST);
         mainContainer.add(headerPanel, BorderLayout.NORTH);
         
+        // Create tabbed pane for role-based navigation
+        JTabbedPane tabbedPane = new JTabbedPane();
+        tabbedPane.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        tabbedPane.setBackground(BACKGROUND_COLOR);
+        
+        // Add Student Management tab (for all users)
+        tabbedPane.addTab("📚 Students", createStudentManagementPanel());
+        
+        // Add Teacher Panel tab (for Teachers and Admins)
+        if (currentUser.getRole() == UserRole.TEACHER || currentUser.getRole() == UserRole.ADMIN) {
+            TeacherPanel teacherPanel = new TeacherPanel(currentUser);
+            tabbedPane.addTab("👨‍🏫 Teacher Dashboard", teacherPanel);
+        }
+        
+        // Add Admin Panel placeholder (for Admins only)
+        if (currentUser.getRole() == UserRole.ADMIN) {
+            tabbedPane.addTab("⚙️ Admin Settings", createAdminPanel());
+        }
+        
+        mainContainer.add(tabbedPane, BorderLayout.CENTER);
+        add(mainContainer);
+    }
+    
+    private JPanel createStudentManagementPanel() {
         // Content panel
         JPanel contentPanel = new JPanel(new BorderLayout(20, 20));
         contentPanel.setBackground(BACKGROUND_COLOR);
@@ -194,8 +218,8 @@ public class MainFrame extends JFrame {
             new EmptyBorder(0, 0, 0, 0)
         ));
         
-        // Table
-        String[] columns = {"Student ID", "Name", "Email", "Major"};
+        // Table with all student fields
+        String[] columns = {"Student ID", "Name", "Email", "Major", "Phone", "GPA", "Status"};
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -248,9 +272,80 @@ public class MainFrame extends JFrame {
         tableCard.add(scrollPane, BorderLayout.CENTER);
         
         contentPanel.add(tableCard, BorderLayout.CENTER);
-        mainContainer.add(contentPanel, BorderLayout.CENTER);
         
-        add(mainContainer);
+        return contentPanel;
+    }
+    
+    private JPanel createAdminPanel() {
+        JPanel panel = new JPanel(new BorderLayout(0, 20));
+        panel.setBackground(BACKGROUND_COLOR);
+        panel.setBorder(new EmptyBorder(20, 20, 20, 20));
+        
+        // Header card with stats
+        JPanel headerCard = new JPanel();
+        headerCard.setBackground(CARD_COLOR);
+        headerCard.setBorder(new EmptyBorder(20, 25, 20, 25));
+        headerCard.setLayout(new BoxLayout(headerCard, BoxLayout.Y_AXIS));
+        
+        JLabel titleLabel = new JLabel("⚙️ Admin Settings");
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        titleLabel.setForeground(TEXT_COLOR);
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerCard.add(titleLabel);
+        
+        headerCard.add(Box.createVerticalStrut(10));
+        
+        JLabel infoLabel = new JLabel("Manage system settings, users, and security configurations.");
+        infoLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        infoLabel.setForeground(LIGHT_TEXT);
+        infoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerCard.add(infoLabel);
+        
+        headerCard.add(Box.createVerticalStrut(20));
+        
+        // Stats panel
+        JPanel statsPanel = new JPanel(new GridLayout(1, 4, 15, 0));
+        statsPanel.setBackground(CARD_COLOR);
+        statsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        statsPanel.setMaximumSize(new Dimension(1000, 80));
+        
+        // Get user counts
+        com.itc.studentmgmt.dao.UserDAO userDAO = new com.itc.studentmgmt.dao.UserDAO();
+        int teacherCount = userDAO.countUsersByRole(UserRole.TEACHER);
+        int studentUserCount = userDAO.countUsersByRole(UserRole.STUDENT);
+        
+        statsPanel.add(createStatCard("👥 Total Students", String.valueOf(studentDAO.countStudents())));
+        statsPanel.add(createStatCard("👨‍🏫 Teachers", String.valueOf(teacherCount)));
+        statsPanel.add(createStatCard("🔐 Security Status", "Active"));
+        statsPanel.add(createStatCard("📊 System Health", "OK"));
+        
+        headerCard.add(statsPanel);
+        panel.add(headerCard, BorderLayout.NORTH);
+        
+        // User Management Panel
+        UserManagementPanel userMgmtPanel = new UserManagementPanel(currentUser);
+        panel.add(userMgmtPanel, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    private JPanel createStatCard(String title, String value) {
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBackground(new Color(236, 240, 241));
+        card.setBorder(new EmptyBorder(15, 20, 15, 20));
+        
+        JLabel titleL = new JLabel(title);
+        titleL.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        titleL.setForeground(LIGHT_TEXT);
+        card.add(titleL);
+        
+        JLabel valueL = new JLabel(value);
+        valueL.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        valueL.setForeground(PRIMARY_COLOR);
+        card.add(valueL);
+        
+        return card;
     }
     
     private JButton createStyledButton(String text, boolean primary) {
@@ -298,7 +393,10 @@ public class MainFrame extends JFrame {
                 student.getStudentId(),
                 student.getName(),
                 student.getEmail(),
-                student.getMajor()
+                student.getMajor(),
+                student.getPhone() != null ? student.getPhone() : "-",
+                String.format("%.2f", student.getGpa()),
+                student.getStatus() != null ? student.getStatus() : "ACTIVE"
             });
         }
     }
@@ -319,13 +417,17 @@ public class MainFrame extends JFrame {
                 student.getStudentId(),
                 student.getName(),
                 student.getEmail(),
-                student.getMajor()
+                student.getMajor(),
+                student.getPhone() != null ? student.getPhone() : "-",
+                String.format("%.2f", student.getGpa()),
+                student.getStatus() != null ? student.getStatus() : "ACTIVE"
             });
         }
     }
     
     private void showAddDialog() {
         JDialog dialog = createStyledDialog("Add New Student");
+        dialog.setSize(550, 600);
         
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBackground(Color.WHITE);
@@ -338,11 +440,35 @@ public class MainFrame extends JFrame {
         JTextField nameField = createStyledTextField();
         JTextField emailField = createStyledTextField();
         JTextField majorField = createStyledTextField();
+        JTextField phoneField = createStyledTextField();
+        JTextField addressField = createStyledTextField();
+        JTextField gpaField = createStyledTextField();
+        gpaField.setText("0.00");
+        String[] statuses = {"ACTIVE", "INACTIVE", "GRADUATED", "SUSPENDED"};
+        JComboBox<String> statusCombo = new JComboBox<>(statuses);
+        statusCombo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         
-        addFormField(panel, gbc, 0, "Student ID:", idField);
-        addFormField(panel, gbc, 1, "Name:", nameField);
-        addFormField(panel, gbc, 2, "Email:", emailField);
-        addFormField(panel, gbc, 3, "Major:", majorField);
+        addFormField(panel, gbc, 0, "Student ID *:", idField);
+        addFormField(panel, gbc, 1, "Name *:", nameField);
+        addFormField(panel, gbc, 2, "Email *:", emailField);
+        addFormField(panel, gbc, 3, "Major *:", majorField);
+        addFormField(panel, gbc, 4, "Phone 🔒:", phoneField);
+        addFormField(panel, gbc, 5, "Address 🔒:", addressField);
+        addFormField(panel, gbc, 6, "GPA:", gpaField);
+        
+        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 1;
+        JLabel statusLabel = new JLabel("Status:");
+        statusLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        panel.add(statusLabel, gbc);
+        gbc.gridx = 1;
+        panel.add(statusCombo, gbc);
+        
+        // Info label about encryption
+        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2;
+        JLabel encLabel = new JLabel("🔒 = Encrypted fields (Phone & Address)");
+        encLabel.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        encLabel.setForeground(new Color(39, 174, 96));
+        panel.add(encLabel, gbc);
         
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
         buttonPanel.setBackground(Color.WHITE);
@@ -355,17 +481,41 @@ public class MainFrame extends JFrame {
             String major = majorField.getText().trim();
             
             if (id.isEmpty() || name.isEmpty() || email.isEmpty() || major.isEmpty()) {
-                showStyledMessage(dialog, "All fields are required", "Error", JOptionPane.ERROR_MESSAGE);
+                showStyledMessage(dialog, "Required fields (*) cannot be empty", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
             
             Student student = new Student(id, name, email, major);
+            student.setPhone(phoneField.getText().trim());
+            student.setAddress(addressField.getText().trim());
+            try {
+                student.setGpa(Double.parseDouble(gpaField.getText().trim()));
+            } catch (NumberFormatException ex) {
+                student.setGpa(0.0);
+            }
+            student.setStatus((String) statusCombo.getSelectedItem());
+            
             if (studentDAO.addStudent(student)) {
-                showStyledMessage(dialog, "Student added successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                showStyledMessage(dialog, "Student added successfully!\n(Sensitive data encrypted)", "Success", JOptionPane.INFORMATION_MESSAGE);
                 loadStudents();
                 dialog.dispose();
             } else {
-                showStyledMessage(dialog, "Failed to add student. ID may already exist.", "Error", JOptionPane.ERROR_MESSAGE);
+                // Show specific error message based on error code
+                String errorMsg;
+                switch (studentDAO.getLastErrorCode()) {
+                    case StudentDAO.ERROR_DUPLICATE_ID:
+                        errorMsg = "Student ID '" + id + "' already exists!\nPlease use a different Student ID.";
+                        break;
+                    case StudentDAO.ERROR_DUPLICATE_EMAIL:
+                        errorMsg = "Email '" + email + "' is already registered!\nPlease use a different email address.";
+                        break;
+                    case StudentDAO.ERROR_DATABASE:
+                        errorMsg = "Database error: " + studentDAO.getLastErrorMessage();
+                        break;
+                    default:
+                        errorMsg = "Failed to add student. " + studentDAO.getLastErrorMessage();
+                }
+                showStyledMessage(dialog, errorMsg, "Error", JOptionPane.ERROR_MESSAGE);
             }
         });
         
@@ -376,7 +526,7 @@ public class MainFrame extends JFrame {
         buttonPanel.add(cancelButton);
         
         gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridy = 9;
         gbc.gridwidth = 2;
         gbc.insets = new Insets(20, 8, 8, 8);
         panel.add(buttonPanel, gbc);
@@ -401,6 +551,7 @@ public class MainFrame extends JFrame {
         }
         
         JDialog dialog = createStyledDialog("Edit Student");
+        dialog.setSize(550, 600);
         
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBackground(Color.WHITE);
@@ -415,6 +566,16 @@ public class MainFrame extends JFrame {
         emailField.setText(student.getEmail());
         JTextField majorField = createStyledTextField();
         majorField.setText(student.getMajor());
+        JTextField phoneField = createStyledTextField();
+        phoneField.setText(student.getPhone() != null ? student.getPhone() : "");
+        JTextField addressField = createStyledTextField();
+        addressField.setText(student.getAddress() != null ? student.getAddress() : "");
+        JTextField gpaField = createStyledTextField();
+        gpaField.setText(String.format("%.2f", student.getGpa()));
+        String[] statuses = {"ACTIVE", "INACTIVE", "GRADUATED", "SUSPENDED"};
+        JComboBox<String> statusCombo = new JComboBox<>(statuses);
+        statusCombo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        statusCombo.setSelectedItem(student.getStatus() != null ? student.getStatus() : "ACTIVE");
         
         gbc.gridx = 0;
         gbc.gridy = 0;
@@ -427,9 +588,26 @@ public class MainFrame extends JFrame {
         idValue.setForeground(LIGHT_TEXT);
         panel.add(idValue, gbc);
         
-        addFormField(panel, gbc, 1, "Name:", nameField);
-        addFormField(panel, gbc, 2, "Email:", emailField);
-        addFormField(panel, gbc, 3, "Major:", majorField);
+        addFormField(panel, gbc, 1, "Name *:", nameField);
+        addFormField(panel, gbc, 2, "Email *:", emailField);
+        addFormField(panel, gbc, 3, "Major *:", majorField);
+        addFormField(panel, gbc, 4, "Phone 🔒:", phoneField);
+        addFormField(panel, gbc, 5, "Address 🔒:", addressField);
+        addFormField(panel, gbc, 6, "GPA:", gpaField);
+        
+        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 1;
+        JLabel statusLabel = new JLabel("Status:");
+        statusLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        panel.add(statusLabel, gbc);
+        gbc.gridx = 1;
+        panel.add(statusCombo, gbc);
+        
+        // Info label about encryption
+        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2;
+        JLabel encLabel = new JLabel("🔒 = Encrypted fields (Phone & Address)");
+        encLabel.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        encLabel.setForeground(new Color(39, 174, 96));
+        panel.add(encLabel, gbc);
         
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
         buttonPanel.setBackground(Color.WHITE);
@@ -439,13 +617,33 @@ public class MainFrame extends JFrame {
             student.setName(nameField.getText().trim());
             student.setEmail(emailField.getText().trim());
             student.setMajor(majorField.getText().trim());
+            student.setPhone(phoneField.getText().trim());
+            student.setAddress(addressField.getText().trim());
+            try {
+                student.setGpa(Double.parseDouble(gpaField.getText().trim()));
+            } catch (NumberFormatException ex) {
+                student.setGpa(0.0);
+            }
+            student.setStatus((String) statusCombo.getSelectedItem());
             
             if (studentDAO.updateStudent(student)) {
                 showStyledMessage(dialog, "Student updated successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                 loadStudents();
                 dialog.dispose();
             } else {
-                showStyledMessage(dialog, "Failed to update student", "Error", JOptionPane.ERROR_MESSAGE);
+                // Show specific error message based on error code
+                String errorMsg;
+                switch (studentDAO.getLastErrorCode()) {
+                    case StudentDAO.ERROR_DUPLICATE_EMAIL:
+                        errorMsg = "Email '" + student.getEmail() + "' is already registered to another student!\nPlease use a different email address.";
+                        break;
+                    case StudentDAO.ERROR_DATABASE:
+                        errorMsg = "Database error: " + studentDAO.getLastErrorMessage();
+                        break;
+                    default:
+                        errorMsg = "Failed to update student. " + studentDAO.getLastErrorMessage();
+                }
+                showStyledMessage(dialog, errorMsg, "Error", JOptionPane.ERROR_MESSAGE);
             }
         });
         
@@ -456,7 +654,7 @@ public class MainFrame extends JFrame {
         buttonPanel.add(cancelButton);
         
         gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridy = 9;
         gbc.gridwidth = 2;
         gbc.insets = new Insets(20, 8, 8, 8);
         panel.add(buttonPanel, gbc);

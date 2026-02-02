@@ -74,7 +74,269 @@ Educational institutions face significant challenges in managing student data se
 
 ---
 
-## 💡 SOLUTION ARCHITECTURE
+## � SOLUTION FLOW
+
+### System Architecture & Data Flow
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        USER INTERACTION LAYER                          │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+              ┌──────────┐    ┌──────────┐   ┌──────────┐
+              │ Student  │    │ Teacher  │   │  Admin   │
+              │ Portal   │    │ Portal   │   │ Portal   │
+              └──────────┘    └──────────┘   └──────────┘
+                    │               │               │
+                    └───────────────┼───────────────┘
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                    AUTHENTICATION & AUTHORIZATION                      │
+│  Step 1: Login Request → Username/Password Validation                 │
+│  Step 2: Argon2id Hash Verification (8,400 years to crack)            │
+│  Step 3: [Optional] 2FA Code Generation & Verification                │
+│  Step 4: Role-Based Access Control (Student/Teacher/Admin)            │
+│  Step 5: Secure Session Token Generation (AES-256 encrypted)          │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                        SECURITY LAYER                                  │
+│  • Intrusion Detection System (IDS) - Monitors all activities         │
+│  • Rate Limiting - Prevents brute force attacks                       │
+│  • Input Validation - SQL Injection prevention                        │
+│  • XSS Protection - Script injection prevention                       │
+│  • Session Management - Token validation & refresh                    │
+│  • Audit Logging - Every action logged with timestamp & IP            │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+        ┌────────────────┐  ┌────────────┐  ┌─────────────┐
+        │ Data Encryption│  │ Connection │  │   Audit     │
+        │   (AES-256)    │  │   Pooling  │  │  Logging    │
+        │                │  │ (HikariCP) │  │             │
+        │ • Student Data │  │            │  │ • Login/out │
+        │ • Grades       │  │ 10 Conns   │  │ • CRUD Ops  │
+        │ • Personal Info│  │ 12ms wait  │  │ • Security  │
+        └────────────────┘  └────────────┘  └─────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                      DATA ACCESS LAYER (DAOs)                          │
+│  • UserDAO - User authentication & management                          │
+│  • StudentDAO - Student records CRUD operations                        │
+│  • ScheduleDAO - Course schedule management                            │
+│  • AnnouncementDAO - Communication system                              │
+│  • StudentEnrollmentDAO - Enrollment tracking                          │
+│  ALL using Prepared Statements (SQL Injection Prevention)              │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                     DATABASE LAYER (MySQL 8.0)                         │
+│  ┌──────────────────────────────────────────────────────────────────┐ │
+│  │ Tables: users, students, schedules, announcements,               │ │
+│  │         student_enrollments, audit_logs                          │ │
+│  │                                                                  │ │
+│  │ Security Features:                                               │ │
+│  │ • Foreign Key Constraints - Referential integrity               │ │
+│  │ • NOT NULL Constraints - Required field enforcement             │ │
+│  │ • UNIQUE Constraints - Prevent duplicates                       │ │
+│  │ • Default Values - Consistency                                  │ │
+│  │ • Indexed Queries - Fast lookups (< 200ms)                      │ │
+│  │ • Transaction Support - ACID properties                         │ │
+│  │ • UTF-8 Encoding - International character support              │ │
+│  └──────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Complete User Journey Flow
+
+#### 📝 Scenario 1: Student Registration & Login
+
+```
+1. Admin Creates Student Account
+   ↓
+   [Admin Portal] → Add New Student
+   ↓
+   Enter: Name, Email, Student ID, Major, etc.
+   ↓
+   System: Generates temporary password → Argon2id hash (64MB, 3 iterations)
+   ↓
+   Database: Inserts into 'students' table (AES-256 encrypted fields)
+   ↓
+   Audit Log: "Admin 'admin' created student 'STU001'" + timestamp + IP
+
+2. Student First Login
+   ↓
+   [Login Screen] → Enter username/password
+   ↓
+   System: Hashes entered password using Argon2id
+   ↓
+   System: Compares hash with stored hash (constant-time comparison)
+   ↓
+   [If 2FA Enabled] → Generate 6-digit code → Send to Telegram/Discord
+   ↓
+   Student enters 2FA code
+   ↓
+   System: Validates code (5-minute expiry window)
+   ↓
+   Success: Create secure session token (AES-256 encrypted)
+   ↓
+   Audit Log: "Student 'STU001' logged in from IP 192.168.1.100"
+   ↓
+   Redirect to Student Dashboard
+
+3. Student Views Schedule
+   ↓
+   [Student Dashboard] → Click "My Schedule"
+   ↓
+   System: Checks RBAC permissions (Student role)
+   ↓
+   Database Query: SELECT courses JOIN enrollments WHERE student_id = 'STU001'
+   ↓
+   System: Decrypts sensitive data (AES-256)
+   ↓
+   Display: Course cards with schedule details
+   ↓
+   Audit Log: "Student 'STU001' viewed schedule"
+```
+
+#### 👨‍🏫 Scenario 2: Teacher Managing Grades
+
+```
+1. Teacher Login
+   ↓
+   [Login] → Authenticate (Argon2id + optional 2FA)
+   ↓
+   Session Created → Teacher role permissions applied
+   ↓
+   [Teacher Dashboard]
+
+2. View Class Roster
+   ↓
+   Click "My Classes" → Select course "CS101"
+   ↓
+   System: Verify permission (Teacher role + assigned to course)
+   ↓
+   Query: Get all enrolled students in CS101
+   ↓
+   Display: Student list with current grades
+   ↓
+   Audit Log: "Teacher 'teacher1' viewed CS101 roster"
+
+3. Enter Grade
+   ↓
+   Select student → Enter grade "A-" → Click Save
+   ↓
+   System: Validates grade format (A+, A, A-, B+, etc.)
+   ↓
+   Database: UPDATE student_enrollments SET grade='A-' WHERE ...
+   ↓
+   System: Encrypts grade data (AES-256)
+   ↓
+   Commit Transaction (ACID compliance)
+   ↓
+   Audit Log: "Teacher 'teacher1' updated grade for STU001 in CS101 to A-"
+   ↓
+   Success Message: "Grade saved successfully"
+```
+
+#### ⚙️ Scenario 3: Security Detection & Response
+
+```
+1. Brute Force Attack Attempt
+   ↓
+   Attacker: Multiple failed login attempts
+   ↓
+   IDS Detection: 5 failed attempts from IP 10.0.0.50
+   ↓
+   System Response:
+   │ • Block IP for 60 minutes
+   │ • Log security event (CRITICAL severity)
+   │ • Increment threat score
+   │ • Generate security alert
+   ↓
+   Database: INSERT INTO audit_logs (event_type='BRUTE_FORCE_DETECTED', ...)
+   ↓
+   [Optional] Send alert to Admin dashboard
+   ↓
+   Next login attempt from 10.0.0.50: BLOCKED
+   ↓
+   Message: "Account temporarily locked. Try again in 60 minutes."
+
+2. SQL Injection Attempt
+   ↓
+   Attacker: Input "admin' OR '1'='1" in username field
+   ↓
+   System: Input validation detects SQL injection pattern
+   ↓
+   IDS: Pattern matching triggers alert
+   ↓
+   Response:
+   │ • Reject request immediately
+   │ • Log security event (injection_attempt)
+   │ • Increase threat score for IP
+   │ • Block IP if threshold exceeded
+   ↓
+   Audit Log: "SQL injection attempt detected from IP 172.16.0.99"
+   ↓
+   Display: "Invalid input detected"
+```
+
+### Data Encryption & Decryption Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  SENSITIVE DATA HANDLING                     │
+└─────────────────────────────────────────────────────────────┘
+
+1. WRITE OPERATION (Encryption)
+   ↓
+   User Input: Student SSN "123-45-6789"
+   ↓
+   Application Layer: SensitiveDataProtector.encrypt(ssn)
+   ↓
+   Process:
+   │ • Generate random IV (Initialization Vector)
+   │ • Use AES-256 in CBC mode
+   │ • Key: 256-bit master key (stored securely)
+   │ • Encrypt: AES(plaintext, key, IV)
+   ↓
+   Encrypted Output: "U2FsdGVkX1+vupppZksvRf5pq5g5XjFRIipRkwB0K1Y="
+   ↓
+   Database Storage: Store as TEXT field
+   ↓
+   Audit: "Sensitive data encrypted and stored"
+
+2. READ OPERATION (Decryption)
+   ↓
+   Database Query: SELECT encrypted_ssn FROM students WHERE id=1
+   ↓
+   Retrieve: "U2FsdGVkX1+vupppZksvRf5pq5g5XjFRIipRkwB0K1Y="
+   ↓
+   Application Layer: SensitiveDataProtector.decrypt(encrypted_ssn)
+   ↓
+   Process:
+   │ • Extract IV from encrypted data
+   │ • Use same AES-256 key
+   │ • Decrypt: AES_DECRYPT(ciphertext, key, IV)
+   ↓
+   Decrypted Output: "123-45-6789"
+   ↓
+   RBAC Check: Verify user has permission to view SSN
+   ↓
+   Display: Show to authorized user only
+   ↓
+   Audit: "User 'admin' accessed encrypted SSN for STU001"
+```
+
+---
+
+## �💡 SOLUTION ARCHITECTURE
 
 ### CIA Triad Implementation
 

@@ -261,6 +261,9 @@ public class IntrusionDetection {
                 username, ipAddress,
                 "Brute force attack detected and blocked"
             );
+            
+            // Send Telegram alert for brute force
+            TelegramAlertService.alertBruteForce(ipAddress, username, threat.getScore());
         }
     }
     
@@ -302,6 +305,9 @@ public class IntrusionDetection {
         generateAlert(AlertSeverity.CRITICAL, "IP_BLOCKED", ipAddress,
             "IP address blocked: " + reason,
             Map.of("duration", BLOCK_DURATION.toString()));
+        
+        // Send Telegram alert for IP blocked
+        TelegramAlertService.alertIpBlocked(ipAddress, reason);
         
         System.out.println("🚫 IP BLOCKED: " + ipAddress + " - " + reason);
     }
@@ -447,8 +453,16 @@ public class IntrusionDetection {
     
     /**
      * Check for SQL injection patterns.
+     * Returns true if SQL injection is detected.
      */
     public static boolean detectSqlInjection(String input) {
+        return detectSqlInjection(input, "UNKNOWN");
+    }
+    
+    /**
+     * Check for SQL injection patterns with IP tracking.
+     */
+    public static boolean detectSqlInjection(String input, String ipAddress) {
         if (input == null) return false;
         
         String[] sqlPatterns = {
@@ -464,6 +478,8 @@ public class IntrusionDetection {
         
         for (String pattern : sqlPatterns) {
             if (input.matches(pattern)) {
+                // Send Telegram alert for SQL injection
+                TelegramAlertService.alertSqlInjection(ipAddress, input);
                 return true;
             }
         }
@@ -473,8 +489,16 @@ public class IntrusionDetection {
     
     /**
      * Check for XSS patterns.
+     * Returns true if XSS is detected.
      */
     public static boolean detectXss(String input) {
+        return detectXss(input, "UNKNOWN");
+    }
+    
+    /**
+     * Check for XSS patterns with IP tracking.
+     */
+    public static boolean detectXss(String input, String ipAddress) {
         if (input == null) return false;
         
         String[] xssPatterns = {
@@ -487,6 +511,8 @@ public class IntrusionDetection {
         
         for (String pattern : xssPatterns) {
             if (input.matches(pattern)) {
+                // Send Telegram alert for XSS
+                TelegramAlertService.alertXssAttempt(ipAddress, input);
                 return true;
             }
         }
